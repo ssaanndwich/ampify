@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Music Visualizer
+
+A Next.js application that uses AI to generate custom WebGL shaders that visualize music in real-time.
+
+## Features
+
+- Real-time audio visualization using WebGL shaders
+- Generate custom visualizations using natural language prompts
+- Support for microphone and screen audio input
+- Dynamic animation that responds to audio frequency data
+- Secure server-side OpenAI API calls using Next.js server actions and API routes
+
+## Prerequisites
+
+- Node.js 18+ and npm
+- OpenAI API key
 
 ## Getting Started
 
-First, run the development server:
+1. Clone the repository and install dependencies:
+
+```bash
+git clone <repository-url>
+cd music_visualizer_ai
+npm install
+```
+
+2. Set up your environment variables:
+
+Create a `.env.local` file in the root directory with your OpenAI API key:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+3. Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How to Use
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Start Audio Input**: Click either "Use Microphone" or "Use Screen Audio" to begin capturing audio.
+2. **Create a Prompt**: Enter a description of the visualization you want, or select from the example prompts.
+3. **Generate Visualization**: Click "Generate Visualization" to create your custom shader.
+4. **Enjoy the Show**: Watch as the visualization responds to your music or audio input!
 
-## Learn More
+## Implementation Details
 
-To learn more about Next.js, take a look at the following resources:
+The application uses a dual approach for OpenAI API integration:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Server Actions**: The primary method for calling the OpenAI API securely from the server side
+2. **API Routes**: A fallback method if server actions fail or are not supported
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Both approaches keep your API key secure by performing the API calls on the server rather than exposing credentials to the client.
 
-## Deploy on Vercel
+## Technologies Used
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Next.js with Server Actions and API Routes
+- TypeScript
+- Three.js with React Three Fiber
+- Web Audio API
+- OpenAI API
+- TailwindCSS
+- dotenv for environment variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT
