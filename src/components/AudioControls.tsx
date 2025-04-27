@@ -54,22 +54,16 @@ const AudioControls = ({
   };
 
   const getButtonClass = (source: AudioSource) => {
-    const baseClass = 'btn flex items-center justify-center space-x-2 w-full sm:w-auto';
+    const baseClass = 'flex items-center gap-2 py-2 px-3 rounded-lg text-sm transition-all';
     if (isRecording && audioSource === source) {
-      return `${baseClass} btn-danger`;
+      return `${baseClass} ${source === 'microphone' ? 'bg-red-500/80' : 'bg-orange-500/80'} text-white`;
     }
-    if (source === 'microphone') {
-      return `${baseClass} btn-primary`;
-    }
-    if (source === 'screen') {
-      return `${baseClass} bg-purple-600 text-white hover:bg-purple-500 shadow-md hover:shadow-lg`;
-    }
-    return `${baseClass} btn-secondary`;
+    return `${baseClass} bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white`;
   };
 
   return (
-    <div>
-      <div className="flex flex-row gap-6 space-x-6 justify-center">
+    <div className="relative">
+      <div className="flex gap-2">
         <button
           onClick={() => handleSourceSelect('microphone')}
           className={getButtonClass('microphone')}
@@ -90,22 +84,21 @@ const AudioControls = ({
         
         <button
           onClick={() => setShowDeviceSelector(!showDeviceSelector)}
-          className="btn btn-secondary flex items-center justify-center space-x-2 w-full sm:w-auto"
+          className="flex items-center gap-2 py-2 px-3 rounded-lg text-sm transition-all bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white"
           title="Configure Audio Input Device"
         >
           <FiSettings className="w-4 h-4" />
-          <span>{showDeviceSelector ? 'Hide Settings' : 'Audio Settings'}</span>
-          {showDeviceSelector ? <FiChevronUp className="w-3 h-3"/> : <FiChevronDown className="w-3 h-3"/>}
+          {showDeviceSelector ? <FiChevronUp className="w-3.5 h-3.5"/> : <FiChevronDown className="w-3.5 h-3.5"/>}
         </button>
       </div>
 
       {showDeviceSelector && (
-        <div className="w-full p-4 border border-gray-700 rounded-lg bg-gray-800/50 mt-2 space-y-3">
+        <div className="absolute top-full right-0 mt-2 w-72 p-3 border border-gray-700 rounded-lg bg-gray-900 shadow-xl z-10">
           <div className="flex justify-between items-center mb-2">
             <h3 className="text-sm font-medium text-gray-300">Select Microphone</h3>
             <button
               onClick={handleDeviceRefresh}
-              className="btn btn-secondary btn-sm text-xs px-2 py-1 flex items-center space-x-1"
+              className="flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-700/80 text-gray-300 hover:text-white rounded-md transition-colors"
               title="Refresh device list"
             >
               <FiRefreshCw className="w-3 h-3" />
@@ -114,60 +107,46 @@ const AudioControls = ({
           </div>
           
           {audioDevices.length === 0 ? (
-            <div className="p-3 text-center text-sm text-gray-500 bg-gray-700/50 rounded-md">
-              <FiMic className="w-6 h-6 mx-auto text-gray-600 mb-1" />
-              <p>No audio input devices found.</p>
-              <p className="text-xs mt-1">Ensure microphone is connected and permissions are granted.</p>
+            <div className="p-3 text-center text-sm text-gray-400 bg-gray-800/70 rounded-lg">
+              <p className="font-medium">No audio devices found</p>
             </div>
-          ) : (
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+          ) :
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 scrollbar-thin">
               {audioDevices.map(device => (
                 <div 
                   key={device.id}
-                  className={`p-2.5 rounded-md cursor-pointer transition-all duration-150 flex items-center justify-between text-sm border ${
+                  className={`p-2 rounded-md cursor-pointer transition-all flex items-center justify-between text-xs ${
                     pendingDeviceId === device.id 
-                      ? 'border-blue-500 bg-blue-900/30 text-blue-200' 
-                      : 'border-gray-600 hover:bg-gray-700/50 text-gray-300'
+                      ? 'bg-purple-900/20 text-purple-200' 
+                      : 'hover:bg-gray-800 text-gray-300'
                   }`}
                   onClick={() => handleDeviceSelect(device.id)}
                 >
-                  <span className="truncate mr-2">{device.label || 'Unknown Device'}</span>
-                  {pendingDeviceId === device.id && <FiCheck className="w-4 h-4 text-blue-400 flex-shrink-0"/>}
+                  <div className="flex items-center gap-2 truncate">
+                    <FiMic className={`w-3.5 h-3.5 ${pendingDeviceId === device.id ? 'text-purple-300' : 'text-gray-400'}`} />
+                    <span className="truncate">{device.label || 'Unknown Device'}</span>
+                  </div>
+                  {pendingDeviceId === device.id && 
+                    <FiCheck className="w-3.5 h-3.5 text-purple-400 flex-shrink-0"/>
+                  }
                 </div>
               ))}
             </div>
-          )}
+          }
         </div>
       )}
 
       {error && (
-        <div className="w-full bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg relative mt-2 text-sm">
-          <div className="flex items-start">
-            <FiXCircle className="h-5 w-5 text-red-400 flex-shrink-0 mr-2 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-medium">Audio Error</p>
-              <p className="text-xs mt-1">{error}</p>
-              {error.includes('permission') && (
-                <button
-                  className="underline text-xs mt-1.5 text-red-400 hover:text-red-300"
-                  onClick={() => setShowErrorDetails(!showErrorDetails)}
-                >
-                  {showErrorDetails ? 'Hide Details' : 'Show Details'}
-                </button>
-              )}
-              {showErrorDetails && (
-                <div className="text-xs mt-2 text-red-400/80 border-t border-red-700/50 pt-2">
-                  <p>
-                    Please ensure your browser has permission to access your {audioSource === 'microphone' ? 'microphone' : 'screen audio'}.
-                    Check your browser site settings for this page.
-                  </p>
-                </div>
-              )}
+        <div className="absolute top-full right-0 mt-2 w-72 p-3 bg-red-950/80 border border-red-800 text-red-300 rounded-lg shadow-xl z-10">
+          <div className="flex items-start gap-2">
+            <FiXCircle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-sm">Audio Error</p>
+              <p className="mt-1 text-xs text-red-300/90">{error}</p>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

@@ -363,7 +363,11 @@ const DynamicComponentRenderer: React.FC<DynamicComponentRendererProps> = ({
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full bg-black">
+    <div 
+      ref={containerRef} 
+      className="w-full h-full"
+      style={{ position: 'relative', overflow: 'hidden' }}
+    >
       {/* Canvas will be created and appended here */}
     </div>
   );

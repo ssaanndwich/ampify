@@ -110,7 +110,11 @@ const ShaderVisualizer = ({
   
   return (
     <div className="w-full h-full">
-      <Canvas key={`canvas-${shaderCounter}`}>
+      <Canvas 
+        key={`canvas-${shaderCounter}`}
+        className="w-full h-full"
+        style={{ position: 'absolute' }}
+      >
         <ShaderMaterial
           fragmentShader={fragmentShader}
           vertexShader={vertexShader}

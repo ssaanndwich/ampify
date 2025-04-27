@@ -1,181 +1,203 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect } from 'react';
 import { useAudioProcessor } from '@/hooks/useAudioProcessor';
-import ComponentPromptForm from '@/components/ComponentPromptForm';
-import DynamicComponentRenderer from '@/components/DynamicComponentRenderer';
-import { generateComponent } from './actions/generateComponent';
 import AudioControls from '@/components/AudioControls';
-import { FiCode, FiCpu, FiMusic, FiSettings, FiInfo } from 'react-icons/fi';
+import ShaderVisualizer from '@/components/ShaderVisualizer';
+import { defaultFragmentShader, defaultVertexShader } from '@/components/DefaultShaders';
+import { Dialog } from '@/components/Dialog';
+import { generateComponent } from './actions/generateComponent';
+import DynamicComponentRenderer from '@/components/DynamicComponentRenderer';
 
-export default function ComponentVisualizerPage() {
-  // State for component data
-  const [componentCode, setComponentCode] = useState<string>('');
-  const [componentDescription, setComponentDescription] = useState<string>('');
-  const [lastPrompt, setLastPrompt] = useState<string>('');
-  const [showCode, setShowCode] = useState(false);
-  
-  // UI state
-  const [loading, setLoading] = useState(false);
-  const [openaiError, setOpenaiError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  
-  // Audio processing
+interface Generation {
+  id: string;
+  prompt: string;
+  fragmentShader: string;
+  vertexShader: string;
+  componentCode?: string;
+  createdAt: Date;
+}
+
+export default function Home() {
   const audioProcessor = useAudioProcessor();
-
-  const handlePromptSubmit = async (prompt: string) => {
-    console.log('[Client] Submitting component prompt:', prompt);
-    setLastPrompt(prompt);
-    setLoading(true);
-    setOpenaiError(null);
-    setComponentCode(''); // Clear previous component on new submission
-    setComponentDescription('');
+  const [prompt, setPrompt] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generations, setGenerations] = useState<Generation[]>([]);
+  const [activeGeneration, setActiveGeneration] = useState<Generation | null>(null);
+  const [showGenerationDialog, setShowGenerationDialog] = useState(false);
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || isSubmitting) return;
     
-    startTransition(async () => {
-      try {
-        console.log('[Client] Calling server action');
-        const result = await generateComponent(prompt);
-        console.log('[Client] Received response from server action');
-        
-        if (result && result.componentCode) {
-          console.log('[Client] Updating component state with new data');
-          setComponentCode(result.componentCode);
-          setComponentDescription(result.description);
-          console.log('[Client] State updated');
-        } else {
-          // Handle potential errors more robustly
-          const errorMessage = result && typeof result === 'object' && 'error' in result 
-                             ? result.error 
-                             : 'Failed to generate component: Invalid response format';
-          setOpenaiError(String(errorMessage)); 
-        }
-      } catch (error) {
-        console.error('[Client] Error in handlePromptSubmit:', error);
-        const message = error instanceof Error ? error.message : 'An unknown error occurred';
-        setOpenaiError(`Generation failed: ${message}`);
-      } finally {
-        setLoading(false);
-      }
-    });
+    setIsSubmitting(true);
+    setShowGenerationDialog(true);
+    
+    try {
+      // Call the generateComponent server action with the prompt
+      const result = await generateComponent(prompt);
+      
+      const newGeneration: Generation = {
+        id: Date.now().toString(),
+        prompt,
+        fragmentShader: defaultFragmentShader,
+        vertexShader: defaultVertexShader,
+        componentCode: result.componentCode,
+        createdAt: new Date()
+      };
+      
+      setGenerations(prev => [newGeneration, ...prev]);
+      setActiveGeneration(newGeneration);
+      setPrompt('');
+    } catch (error) {
+      console.error('Error generating visualization:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelectGeneration = (generation: Generation) => {
+    setActiveGeneration(generation);
+    setShowGenerationDialog(true);
   };
 
   return (
-    <div className="flex flex-col min-h-screen text-gray-200">
-      {/* Header */}
-      <header className="bg-gray-800/80 backdrop-blur-sm sticky top-0 z-10 border-b border-gray-700 shadow-md">
-        <div className="container mx-auto py-3 px-6 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <FiMusic className="text-blue-400 w-6 h-6" />
-            <h1 className="text-xl font-semibold text-gray-100">Ampify</h1>
-          </div>
-          {/* Audio Setup Inline in Header */}
-          <div>
-              <AudioControls
-                start={audioProcessor.start}
-                stop={audioProcessor.stop}
-                isRecording={audioProcessor.isRecording}
-                error={audioProcessor.error}
-                audioSource={audioProcessor.audioSource}
-                audioDevices={audioProcessor.audioDevices}
-                refreshDevices={audioProcessor.refreshDevices}
-                selectedDeviceId={audioProcessor.selectedDeviceId}
-              />
-          </div>
-          {/* <span className="text-xs text-gray-400">by Evan Phibbs</span> */}
-        </div>
+    <main className="flex flex-col min-h-screen bg-gradient-to-b from-black via-gray-900 to-purple-950">
+      {/* Header with title and audio controls */}
+      <header className="py-4 px-6 flex justify-between items-center border-b border-gray-800 bg-black/30 backdrop-blur-sm">
+        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
+          Audio Visualizer
+        </h1>
+        
+        <AudioControls
+          start={audioProcessor.start}
+          stop={audioProcessor.stop}
+          isRecording={audioProcessor.isRecording}
+          error={audioProcessor.error}
+          audioSource={audioProcessor.audioSource}
+          audioDevices={audioProcessor.audioDevices}
+          refreshDevices={audioProcessor.refreshDevices}
+          selectedDeviceId={audioProcessor.selectedDeviceId}
+        />
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-grow container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          {/* Control Panel (Left Side) */}
-          <div className="md:col-span-4 flex flex-col space-y-6">
-            {/* Prompt Form Card */}
-            <div className="card p-5">
-              <h2 className="text-lg font-semibold mb-4 text-gray-100 flex items-center">
-                <FiCpu className="mr-2 text-purple-400" /> Generate Visualization
-              </h2>
-              <ComponentPromptForm 
-                onSubmit={handlePromptSubmit} 
-                loading={loading || isPending}
-              />
-              {openaiError && (
-                <div className="mt-4 p-3 bg-red-900/50 border border-red-700 text-red-300 rounded-md text-sm">
-                  <p className="font-medium">Error:</p>
-                  <p>{openaiError}</p>
-                  {openaiError.includes('API key') && 
-                    <p className="text-xs mt-1 text-red-400">Check your `.env.local` file.</p>
-                  }
-                </div>
-              )}
+      {/* Main content */}
+      <div className="flex-1 flex flex-col p-4 sm:p-6 max-w-7xl mx-auto w-full">
+        {/* Prompt Input */}
+        <div className="w-full max-w-3xl mx-auto mb-10 mt-10">
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Describe your visualization (e.g., neon waves pulsing with the beat...)"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full px-5 py-3 rounded-full bg-gray-800/60 border border-gray-700 text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <button
+              type="submit"
+              disabled={isSubmitting || !prompt.trim()}
+              className={`px-6 py-3 rounded-full font-medium transition-all
+                ${isSubmitting || !prompt.trim() 
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'}`}
+            >
+              Generate
+            </button>
+          </form>
+        </div>
+        
+        {/* Previous Generations Grid */}
+        <div className="mt-6">
+          <h2 className="text-lg font-medium text-gray-300 mb-4">Your Visualizations</h2>
+          
+          {generations.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">
+              No visualizations yet. Create one using the prompt above.
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {generations.map(generation => (
+                <div 
+                  key={generation.id}
+                  onClick={() => handleSelectGeneration(generation)}
+                  className="relative group bg-gray-900/60 border border-gray-800 rounded-xl overflow-hidden cursor-pointer transition-all hover:border-purple-500 h-48"
+                >
+                  <div className="absolute inset-0 opacity-60 pointer-events-none">
+                    {generation.componentCode ? (
+                      <DynamicComponentRenderer
+                        componentCode={generation.componentCode}
+                        analyserNode={audioProcessor.analyserNode}
+                      />
+                    ) : (
+                      <ShaderVisualizer 
+                        fragmentShader={generation.fragmentShader}
+                        vertexShader={generation.vertexShader}
+                        analyserNode={audioProcessor.analyserNode}
+                      />
+                    )}
+                  </div>
+                  <div className="absolute inset-0 flex flex-col justify-end p-4 bg-gradient-to-t from-black/80 to-transparent">
+                    <p className="text-sm text-white font-medium line-clamp-2">{generation.prompt}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {generation.createdAt.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-          {/* Visualization Area (Right Side) */}
-          <div className="md:col-span-8">
-            <div className="card overflow-hidden h-[600px] flex flex-col">
-              {/* Visualization Renderer */}
-              <div className="flex-grow relative bg-black">
-                {componentCode ? (
-                  <DynamicComponentRenderer 
-                    componentCode={componentCode} 
-                    showCode={showCode}
+      {/* Generation Dialog */}
+      <Dialog
+        isOpen={showGenerationDialog}
+        onClose={() => setShowGenerationDialog(false)}
+        className="w-full max-w-4xl"
+      >
+        {isSubmitting ? (
+          <div className="p-6 flex flex-col items-center justify-center">
+            <div className="animate-spin h-12 w-12 border-4 border-purple-500 border-t-transparent rounded-full mb-4"></div>
+            <h3 className="text-xl font-medium text-white">Generating visualization...</h3>
+            <p className="text-gray-400 mt-2">This may take a few moments</p>
+          </div>
+        ) : activeGeneration ? (
+          ({ isFullscreen }) => (
+            <div className="flex flex-col h-full">
+              <div className={`${isFullscreen ? 'h-[calc(100%-70px)]' : 'h-[500px]'} relative rounded-t-xl overflow-hidden flex-1`}>
+                {activeGeneration.componentCode ? (
+                  <DynamicComponentRenderer
+                    componentCode={activeGeneration.componentCode}
                     analyserNode={audioProcessor.analyserNode}
                   />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center text-gray-500">
-                      <FiMusic className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                      <h3 className="text-lg font-semibold mb-1 text-gray-400">Visualization Area</h3>
-                      <p className="text-sm">
-                        {loading ? 'Generating your visualization...' : 'Generate a component to see it here.'}
+                  <ShaderVisualizer 
+                    fragmentShader={activeGeneration.fragmentShader}
+                    vertexShader={activeGeneration.vertexShader}
+                    analyserNode={audioProcessor.analyserNode}
+                  />
+                )}
+                
+                {!audioProcessor.isRecording && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="text-center p-6 rounded-xl">
+                      <p className="text-gray-400 max-w-xs mx-auto">
+                        Connect audio from the header controls to see this visualization
                       </p>
                     </div>
                   </div>
                 )}
-                {/* Loading Overlay */} 
-                {loading && (
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-10">
-                     <div className="flex flex-col items-center space-y-2">
-                        <svg className="animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span className="text-sm text-gray-300">Generating...</span>
-                    </div>
-                  </div>
-                )}
               </div>
-
-              {/* Component Info Footer */}
-              {componentDescription && (
-                <div className="bg-gray-800/90 p-4 border-t border-gray-700">
-                  <div className="flex justify-between items-center">
-                    <p className="text-xs text-gray-400 italic truncate mr-4">
-                      Generated based on: "{lastPrompt}"
-                    </p>
-                    <button
-                      onClick={() => setShowCode(!showCode)}
-                      className="btn btn-secondary btn-sm flex items-center text-xs px-2 py-1"
-                      title={showCode ? 'Hide Generated Code' : 'Show Generated Code'}
-                    >
-                      <FiCode className="mr-1"/> {showCode ? 'Hide Code' : 'Show Code'}
-                    </button>
-                  </div>
-                  {/* <p className="text-sm text-gray-300 mt-2">{componentDescription}</p> */} 
-                </div>
-              )}
+              <div className={`p-5 bg-gray-900 border-t border-gray-800 rounded-b-xl ${isFullscreen ? 'fixed bottom-0 left-0 right-0 z-10' : ''}`}>
+                <h3 className="text-lg font-medium text-white mb-1">{activeGeneration.prompt}</h3>
+                <p className="text-sm text-gray-400">
+                  Created on {activeGeneration.createdAt.toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="mt-12 py-4 px-6 bg-gray-900 border-t border-gray-700 text-center">
-        <p className="text-xs text-gray-500">
-          AI Music Visualizer - Experimenting with generative UI and Web Audio API.
-        </p>
-      </footer>
-    </div>
+          )
+        ) : null}
+      </Dialog>
+    </main>
   );
-} 
+}
