@@ -1,14 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { AudioSource } from '@/hooks/useAudioProcessor';
+import { useState, useEffect } from 'react';
+import { AudioSource, AudioDevice } from '@/hooks/useAudioProcessor';
+import { FiMic, FiMonitor, FiRefreshCw, FiSettings, FiXCircle, FiAlertTriangle, FiChevronDown, FiChevronUp, FiCheck } from 'react-icons/fi';
 
 interface AudioControlsProps {
-  start: (source: AudioSource) => Promise<void>;
+  start: (source: AudioSource, deviceId?: string) => Promise<void>;
   stop: () => void;
   isRecording: boolean;
   error: string | null;
   audioSource: AudioSource | null;
+  audioDevices: AudioDevice[];
+  refreshDevices: () => Promise<void>;
+  selectedDeviceId: string | null;
 }
 
 const AudioControls = ({
@@ -17,74 +21,153 @@ const AudioControls = ({
   isRecording,
   error,
   audioSource,
+  audioDevices,
+  refreshDevices,
+  selectedDeviceId,
 }: AudioControlsProps) => {
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false);
+  const [pendingDeviceId, setPendingDeviceId] = useState<string | null>(selectedDeviceId);
+
+  useEffect(() => {
+    setPendingDeviceId(selectedDeviceId);
+  }, [selectedDeviceId]);
 
   const handleSourceSelect = async (source: AudioSource) => {
     if (isRecording && audioSource === source) {
       stop();
     } else {
-      await start(source);
+      const deviceToUse = source === 'microphone' ? pendingDeviceId || undefined : undefined;
+      await start(source, deviceToUse);
     }
   };
 
+  const handleDeviceRefresh = async () => {
+    await refreshDevices();
+  };
+
+  const handleDeviceSelect = async (deviceId: string) => {
+    setPendingDeviceId(deviceId);
+    if (isRecording && audioSource === 'microphone') {
+      await start('microphone', deviceId);
+    }
+  };
+
+  const getButtonClass = (source: AudioSource) => {
+    const baseClass = 'btn flex items-center justify-center space-x-2 w-full sm:w-auto';
+    if (isRecording && audioSource === source) {
+      return `${baseClass} btn-danger`;
+    }
+    if (source === 'microphone') {
+      return `${baseClass} btn-primary`;
+    }
+    if (source === 'screen') {
+      return `${baseClass} bg-purple-600 text-white hover:bg-purple-500 shadow-md hover:shadow-lg`;
+    }
+    return `${baseClass} btn-secondary`;
+  };
+
   return (
-    <div className="flex flex-col items-center gap-3 w-full">
-      <div className="flex gap-2">
+    <div>
+      <div className="flex flex-row gap-6 space-x-6 justify-center">
         <button
           onClick={() => handleSourceSelect('microphone')}
-          className={`rounded-md px-4 py-2 text-sm font-medium ${
-            isRecording && audioSource === 'microphone'
-              ? 'bg-red-500 text-white'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
-          }`}
+          className={getButtonClass('microphone')}
+          disabled={error?.includes('microphone') && !isRecording}
         >
-          {isRecording && audioSource === 'microphone' ? 'Stop Microphone' : 'Use Microphone'}
+          <FiMic className="w-4 h-4" />
+          <span>{isRecording && audioSource === 'microphone' ? 'Stop Mic' : 'Use Mic'}</span>
         </button>
         
         <button
           onClick={() => handleSourceSelect('screen')}
-          className={`rounded-md px-4 py-2 text-sm font-medium ${
-            isRecording && audioSource === 'screen'
-              ? 'bg-red-500 text-white'
-              : 'bg-blue-500 text-white hover:bg-blue-600'
-          }`}
+          className={getButtonClass('screen')}
+          disabled={error?.includes('screen') && !isRecording}
         >
-          {isRecording && audioSource === 'screen' ? 'Stop Screen Audio' : 'Use Screen Audio'}
+          <FiMonitor className="w-4 h-4" />
+          <span>{isRecording && audioSource === 'screen' ? 'Stop Screen' : 'Use Screen'}</span>
+        </button>
+        
+        <button
+          onClick={() => setShowDeviceSelector(!showDeviceSelector)}
+          className="btn btn-secondary flex items-center justify-center space-x-2 w-full sm:w-auto"
+          title="Configure Audio Input Device"
+        >
+          <FiSettings className="w-4 h-4" />
+          <span>{showDeviceSelector ? 'Hide Settings' : 'Audio Settings'}</span>
+          {showDeviceSelector ? <FiChevronUp className="w-3 h-3"/> : <FiChevronDown className="w-3 h-3"/>}
         </button>
       </div>
 
-      {error && (
-        <div className="w-full max-w-md bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-2">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
-          {error.includes('permission') && (
+      {showDeviceSelector && (
+        <div className="w-full p-4 border border-gray-700 rounded-lg bg-gray-800/50 mt-2 space-y-3">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-sm font-medium text-gray-300">Select Microphone</h3>
             <button
-              className="underline text-xs mt-1 text-red-800"
-              onClick={() => setShowErrorDetails(!showErrorDetails)}
+              onClick={handleDeviceRefresh}
+              className="btn btn-secondary btn-sm text-xs px-2 py-1 flex items-center space-x-1"
+              title="Refresh device list"
             >
-              {showErrorDetails ? 'Hide details' : 'Show details'}
+              <FiRefreshCw className="w-3 h-3" />
+              <span>Refresh</span>
             </button>
-          )}
-          {showErrorDetails && (
-            <div className="text-xs mt-2">
-              <p>
-                This app requires permission to access your {audioSource === 'microphone' ? 'microphone' : 'screen audio'}.
-                Please ensure you've granted the necessary permissions in your browser settings.
-              </p>
+          </div>
+          
+          {audioDevices.length === 0 ? (
+            <div className="p-3 text-center text-sm text-gray-500 bg-gray-700/50 rounded-md">
+              <FiMic className="w-6 h-6 mx-auto text-gray-600 mb-1" />
+              <p>No audio input devices found.</p>
+              <p className="text-xs mt-1">Ensure microphone is connected and permissions are granted.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+              {audioDevices.map(device => (
+                <div 
+                  key={device.id}
+                  className={`p-2.5 rounded-md cursor-pointer transition-all duration-150 flex items-center justify-between text-sm border ${
+                    pendingDeviceId === device.id 
+                      ? 'border-blue-500 bg-blue-900/30 text-blue-200' 
+                      : 'border-gray-600 hover:bg-gray-700/50 text-gray-300'
+                  }`}
+                  onClick={() => handleDeviceSelect(device.id)}
+                >
+                  <span className="truncate mr-2">{device.label || 'Unknown Device'}</span>
+                  {pendingDeviceId === device.id && <FiCheck className="w-4 h-4 text-blue-400 flex-shrink-0"/>}
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {isRecording && (
-        <div className="flex items-center mt-2">
-          <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-2"></div>
-          <span className="text-sm">
-            Listening to {audioSource === 'microphone' ? 'microphone' : 'screen audio'}...
-          </span>
+      {error && (
+        <div className="w-full bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg relative mt-2 text-sm">
+          <div className="flex items-start">
+            <FiXCircle className="h-5 w-5 text-red-400 flex-shrink-0 mr-2 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium">Audio Error</p>
+              <p className="text-xs mt-1">{error}</p>
+              {error.includes('permission') && (
+                <button
+                  className="underline text-xs mt-1.5 text-red-400 hover:text-red-300"
+                  onClick={() => setShowErrorDetails(!showErrorDetails)}
+                >
+                  {showErrorDetails ? 'Hide Details' : 'Show Details'}
+                </button>
+              )}
+              {showErrorDetails && (
+                <div className="text-xs mt-2 text-red-400/80 border-t border-red-700/50 pt-2">
+                  <p>
+                    Please ensure your browser has permission to access your {audioSource === 'microphone' ? 'microphone' : 'screen audio'}.
+                    Check your browser site settings for this page.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
+
     </div>
   );
 };

@@ -4,24 +4,94 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 
 export type AudioSource = 'screen' | 'microphone';
 
+export interface AudioDevice {
+  id: string;
+  label: string;
+  kind: MediaDeviceInfo['kind'];
+}
+
 export interface AudioProcessorResult {
   analyserNode: AnalyserNode | null;
-  start: (source: AudioSource) => Promise<void>;
+  start: (source: AudioSource, deviceId?: string) => Promise<void>;
   stop: () => void;
   isRecording: boolean;
   error: string | null;
   audioContext: AudioContext | null;
   audioSource: AudioSource | null;
+  audioDevices: AudioDevice[];
+  refreshDevices: () => Promise<void>;
+  selectedDeviceId: string | null;
 }
 
 export const useAudioProcessor = (): AudioProcessorResult => {
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+
+  // Function to enumerate available audio devices
+  const refreshDevices = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        throw new Error('Device enumeration not supported in this browser');
+      }
+
+      // We might need to request permissions first to get labeled devices
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(track => track.stop());
+      } catch (permissionErr) {
+        console.warn('Could not get initial permissions for device labels', permissionErr);
+        // Continue anyway, labels might be blank
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices
+        .filter(device => device.kind === 'audioinput')
+        .map(device => ({
+          id: device.deviceId,
+          label: device.label || `Microphone ${device.deviceId.slice(0, 4)}...`,
+          kind: device.kind
+        }));
+
+      console.log('Available audio devices:', audioInputs);
+      setAudioDevices(audioInputs);
+
+      // If we have devices and no selected device, select the default
+      if (audioInputs.length > 0 && !selectedDeviceId) {
+        const defaultDevice = audioInputs.find(d => d.id === 'default' || d.label.includes('Default'));
+        setSelectedDeviceId(defaultDevice ? defaultDevice.id : audioInputs[0].id);
+      }
+
+      return audioInputs;
+    } catch (err) {
+      console.error('Error enumerating audio devices:', err);
+      setError('Failed to list audio devices');
+      return [];
+    }
+  }, [selectedDeviceId]);
+
+  // Initialize device list
+  useEffect(() => {
+    refreshDevices();
+
+    // Listen for device changes
+    const handleDeviceChange = () => {
+      console.log('Media devices changed, refreshing list');
+      refreshDevices();
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, [refreshDevices]);
 
   const stop = useCallback(() => {
     if (streamRef.current) {
@@ -63,25 +133,35 @@ export const useAudioProcessor = (): AudioProcessorResult => {
     return stream;
   };
 
-  const getMicrophoneAudio = async () => {
+  const getMicrophoneAudio = async (deviceId?: string) => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('Microphone access is not supported in this browser');
     }
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+    const constraints: MediaStreamConstraints = {
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
       video: false,
-    });
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
     
-    console.log("Microphone stream obtained");
+    console.log(`Microphone stream obtained${deviceId ? ` for device: ${deviceId}` : ''}`);
     return stream;
   };
 
 
-  const start = useCallback(async (source: AudioSource) => {
+  const start = useCallback(async (source: AudioSource, deviceId?: string) => {
     setError(null);
     setIsRecording(false); // Reset recording state initially
     setAudioSource(source);
+    
+    // Update selected device if provided
+    if (deviceId) {
+      setSelectedDeviceId(deviceId);
+    }
+
+    // Use the provided deviceId or the selected one from state
+    const effectiveDeviceId = deviceId || selectedDeviceId;
 
     try {
       // Ensure previous stream is stopped
@@ -96,8 +176,8 @@ export const useAudioProcessor = (): AudioProcessorResult => {
         stream = await getScreenAudio();
         console.log("Obtained screen audio stream");
       } else if (source === 'microphone') {
-        stream = await getMicrophoneAudio();
-        console.log("Obtained microphone stream");
+        stream = await getMicrophoneAudio(effectiveDeviceId || undefined);
+        console.log(`Obtained microphone stream ${effectiveDeviceId ? `from device ${effectiveDeviceId}` : ''}`);
       } else {
         throw new Error('Invalid audio source');
       }
@@ -151,7 +231,7 @@ export const useAudioProcessor = (): AudioProcessorResult => {
       setAudioSource(null);
       stop(); // Ensure cleanup on error
     }
-  }, [stop]);
+  }, [stop, selectedDeviceId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -173,6 +253,9 @@ export const useAudioProcessor = (): AudioProcessorResult => {
     isRecording,
     error,
     audioContext: audioContextRef.current,
-    audioSource
+    audioSource,
+    audioDevices,
+    refreshDevices,
+    selectedDeviceId
   };
 }; 
